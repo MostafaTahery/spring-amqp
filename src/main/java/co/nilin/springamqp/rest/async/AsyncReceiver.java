@@ -1,6 +1,5 @@
 package co.nilin.springamqp.rest.async;
 
-
 import co.nilin.springamqp.data.entity.User;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -12,15 +11,14 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-
 import java.net.URI;
+
 
 @RabbitListener(queues = "hello")
 public class AsyncReceiver {
 
     @RabbitHandler
     public void receive(User in) {
-
 
         //preparing the restTemplate Parameters
         HttpHeaders headers = new HttpHeaders();
