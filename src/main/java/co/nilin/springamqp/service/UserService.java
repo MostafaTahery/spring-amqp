@@ -1,16 +1,18 @@
-package co.nilin.springamqp.data.service;
+package co.nilin.springamqp.service;
 
-import co.nilin.springamqp.data.dto.RegisterDto;
+import co.nilin.springamqp.data.dto.LoggingDto;
 import co.nilin.springamqp.data.entity.User;
 import co.nilin.springamqp.data.repository.UserRepository;
-import co.nilin.springamqp.rest.async.AsyncReceiver;
+import co.nilin.springamqp.exception.exceptions.BusinessException;
+import co.nilin.springamqp.exception.exceptions.InvalidAuthecticationException;
+import co.nilin.springamqp.exception.exceptions.InvalidVerificationException;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
-import java.rmi.registry.Registry;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -27,18 +29,6 @@ public class UserService implements IUserService {
     private UserService userService;
     @Autowired
     private Queue queue;
-    @Autowired
-    private RegisterDto registerDto;
-
-    @Bean
-    public Queue hello() {
-        return new Queue("hello", true);
-    }
-
-    @Bean
-    public AsyncReceiver asyncReceiver() {
-        return new AsyncReceiver();
-    }
 
 
     @Override
@@ -130,55 +120,56 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public User findUserByUserNameAndVerificationCode(String userName, String verificationCode) {
-        List<User> users = (List<User>) userRepository.findAll();
+    public User findUserByUserNameAndVerificationCode(String userName, String verificationCode) throws Exception {
+        List<User> users = new ArrayList<>();
+        users = (List<User>) userRepository.findAll();
+
         for (User uu : users) {
             if (uu.getUserName().equals(userName) && uu.getVerificationCode().equals(verificationCode))
                 return uu;
         }
-        return null;
+        throw new BusinessException(404 , "not-found", "user with this verify code not found", new NullPointerException());
+
     }
 
     @Override
-    public RegisterDto register(String username, String password, String phonenumber, String email) throws Exception {
+    @ExceptionHandler
+    public synchronized LoggingDto register(String username, String password, String phonenumber, String email) throws Exception {
 
         User user;
-
+        LoggingDto loggingDto =new LoggingDto();
         //Validate and Send to Queue
         if (isUserNameAvailableOrInactive(username) && isUserPhoneAvailableOrInactive(phonenumber)) {
             user = addUser(username, phonenumber, String.valueOf((Math.round(Math.random() * 10000))), password, email, new Date());
-            registerDto.addStatus("User Data is Valid...");
+            loggingDto.addStatus("User Data is Valid...");
 
             //sending to rabbitMQ
-
             template.convertAndSend(queue.getName(), user);
-            registerDto.addStatus("Sended to Queue");
-
+            loggingDto.addStatus("Sended to Queue");
 
         } else {
-            registerDto.addStatus("User Data Invalid...");
-            registerDto.addError("User Date Error!");
-            throw new Exception("Input data Error");
+            throw new BusinessException( 401, "auth-error", "User Data Error!",  new InvalidAuthecticationException());
         }
-        return registerDto;
+        return loggingDto;
     }
 
     @Override
-    public RegisterDto verify(String username, String vcode) throws Exception {
+    @ExceptionHandler
+    public LoggingDto verify(String username, String vcode) throws Exception {
 
+        LoggingDto loggingDto =new LoggingDto();
         //preparing a Registration Object;
         User user = findUserByUserNameAndVerificationCode(username, vcode);
 
         //verification of sended code
         if (user.getVerificationCode().equals(vcode)) {
             activateUser(user);
-            registerDto.addStatus("User Verified...");
+            loggingDto.addStatus("User Verified");
         } else {
-            registerDto.addStatus("User Not Verified");
-            registerDto.addError("code mismatch Error");
-            throw new Exception("code mismatch Error");
+            throw new BusinessException( 400 , "code-not-found", "Code Mismatch Error", new InvalidVerificationException());
         }
-        return registerDto;
+
+        return loggingDto;
     }
 
 }
