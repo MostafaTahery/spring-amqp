@@ -1,6 +1,8 @@
 package co.nilin.springamqp.rest.async;
 
 import co.nilin.springamqp.data.entity.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.http.HttpEntity;
@@ -15,11 +17,11 @@ import java.net.URI;
 
 
 @RabbitListener(queues = "hello")
-public class AsyncReceiver {
-
+public class AsyncReceiver1 {
+private Logger logger= LoggerFactory.getLogger(this.getClass());
     @RabbitHandler
     public void receive(User in) {
-
+        logger.info("Receiver 1 is used");
         //preparing the restTemplate Parameters
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -27,11 +29,9 @@ public class AsyncReceiver {
         multiValueMap.add("receptor", in.getPhoneNumber());
         multiValueMap.add("message", in.getVerificationCode());
         HttpEntity<MultiValueMap<String, Object>> registerDtoHttpEntity = new HttpEntity<MultiValueMap<String, Object>>(multiValueMap, headers);
-
         //preparing the uri
         String url = "https://api.kavenegar.com/v1/49634F384F6752574B654F3261756E744B5A4A6C57513D3D/sms/send";
         URI uri = UriComponentsBuilder.fromUriString(url).build().toUri();
-
         //exchanging the rest request
         RestTemplate restTemplate = new RestTemplate();
         restTemplate.exchange(uri, HttpMethod.POST, registerDtoHttpEntity, String.class);

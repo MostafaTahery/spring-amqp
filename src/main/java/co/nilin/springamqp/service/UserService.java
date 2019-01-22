@@ -4,29 +4,29 @@ import co.nilin.springamqp.data.dto.LoggingDto;
 import co.nilin.springamqp.data.entity.User;
 import co.nilin.springamqp.data.repository.UserRepository;
 import co.nilin.springamqp.exception.exceptions.BusinessException;
-import co.nilin.springamqp.exception.exceptions.InvalidAuthecticationException;
-import co.nilin.springamqp.exception.exceptions.InvalidVerificationException;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.InputMismatchException;
 import java.util.List;
 
-
-@Component
+@Service
 public class UserService implements IUserService {
-
 
     @Autowired
     private UserRepository userRepository;
     @Autowired
     private RabbitTemplate template;
-    @Autowired
-    private UserService userService;
     @Autowired
     private Queue queue;
 
@@ -110,45 +110,43 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public User findUserByUserName(String userName) {
+    public Boolean checkInActiveUsername(String userName) throws Exception {
         List<User> users = (List<User>) userRepository.findAll();
         for (User uu : users) {
-            if (uu.getUserName().equals(userName) && uu.getActive().booleanValue() == true)
-                return uu;
+            if (uu.getUserName().equals(userName) && (uu.getActive().booleanValue())) {
+                throw new BusinessException(404, "This user is already active", "Duplicate User", new InputMismatchException());
+            }
         }
-        return null;
-    }
-
-    @Override
-    public User findUserByUserNameAndVerificationCode(String userName, String verificationCode) throws Exception {
-        List<User> users = new ArrayList<>();
-        users = (List<User>) userRepository.findAll();
-
-        for (User uu : users) {
-            if (uu.getUserName().equals(userName) && uu.getVerificationCode().equals(verificationCode))
-                return uu;
-        }
-        throw new BusinessException(404 , "not-found", "user with this verify code not found", new NullPointerException());
-
+        return true;
     }
 
     @Override
     @ExceptionHandler
-    public synchronized LoggingDto register(String username, String password, String phonenumber, String email) throws Exception {
+    public User findUserByUserNameAndVerificationCode(String userName, String verificationCode) throws Exception {
+        List<User> users = new ArrayList<>();
+        users = (List<User>) userRepository.findAll();
+        for (User uu : users) {
+            if (uu.getUserName().equals(userName) && uu.getVerificationCode().equals(verificationCode) && (!uu.getActive().booleanValue()))
+                return uu;
+        }
+        throw new BusinessException(404, "not-found", "inactive user with this verify code not found", new NullPointerException());
+    }
 
+    @Override
+    @ExceptionHandler
+    public LoggingDto register(String username, String password, String phonenumber, String email) throws Exception {
         User user;
-        LoggingDto loggingDto =new LoggingDto();
+        LoggingDto loggingDto=new LoggingDto();
         //Validate and Send to Queue
         if (isUserNameAvailableOrInactive(username) && isUserPhoneAvailableOrInactive(phonenumber)) {
             user = addUser(username, phonenumber, String.valueOf((Math.round(Math.random() * 10000))), password, email, new Date());
-            loggingDto.addStatus("User Data is Valid...");
-
+            loggingDto.setStatus("User Data is Valid...");
             //sending to rabbitMQ
             template.convertAndSend(queue.getName(), user);
-            loggingDto.addStatus("Sended to Queue");
-
+            loggingDto.setStatus("Sended to Queue");
         } else {
-            throw new BusinessException( 401, "auth-error", "User Data Error!",  new InvalidAuthecticationException());
+            loggingDto.setMessage("User data Error");
+            throw new BusinessException(401, "auth-error", "User Data Error!", new InputMismatchException());
         }
         return loggingDto;
     }
@@ -156,20 +154,21 @@ public class UserService implements IUserService {
     @Override
     @ExceptionHandler
     public LoggingDto verify(String username, String vcode) throws Exception {
-
-        LoggingDto loggingDto =new LoggingDto();
+        LoggingDto loggingDto=new LoggingDto();
         //preparing a Registration Object;
         User user = findUserByUserNameAndVerificationCode(username, vcode);
-
-        //verification of sended code
-        if (user.getVerificationCode().equals(vcode)) {
-            activateUser(user);
-            loggingDto.addStatus("User Verified");
+        if (checkInActiveUsername(username)) {
+            //verification of sended code
+            if ((user.getVerificationCode().equals(vcode))) {
+                activateUser(user);
+                loggingDto.setStatus("User Verified");
+            } else {
+                throw new BusinessException(400, "code-not-found", "Code Mismatch Error", new InputMismatchException());
+            }
+            return loggingDto;
         } else {
-            throw new BusinessException( 400 , "code-not-found", "Code Mismatch Error", new InvalidVerificationException());
+            throw new BusinessException(402, "same-active-username-found", "Username Error", new IllegalArgumentException());
         }
-
-        return loggingDto;
     }
 
 }

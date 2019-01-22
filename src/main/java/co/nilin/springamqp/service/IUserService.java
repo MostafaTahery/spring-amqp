@@ -4,6 +4,7 @@ import co.nilin.springamqp.data.dto.LoggingDto;
 import co.nilin.springamqp.data.entity.User;
 
 import java.util.Date;
+import java.util.List;
 
 
 public interface IUserService{
@@ -24,9 +25,9 @@ public interface IUserService{
 
     public User findUserByPhoneNumber(String phoneNumber);
 
-    public User findUserByUserName(String userName);
+    public Boolean checkInActiveUsername(String userName) throws Exception;
 
-    public User findUserByUserNameAndVerificationCode(String userName,String verificationCode) throws Exception;
+    public User findUserByUserNameAndVerificationCode(String userName, String verificationCode) throws Exception;
 
     public LoggingDto register(String username, String password, String phonenumber, String email)throws Exception;
 
